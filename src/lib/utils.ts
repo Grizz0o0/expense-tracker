@@ -7,24 +7,21 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatVND(amount: number): string {
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
-    maximumFractionDigits: 0,
-  }).format(amount);
+  const formatted = new Intl.NumberFormat('vi-VN').format(Math.round(amount));
+  return `${formatted} vnđ`;
 }
 
 export function formatCompactVND(amount: number): string {
   if (Math.abs(amount) >= 1_000_000_000) {
-    return `${(amount / 1_000_000_000).toFixed(1)} Tỷ`;
+    return `${(amount / 1_000_000_000).toFixed(1)} Tỷ vnđ`;
   }
   if (Math.abs(amount) >= 1_000_000) {
-    return `${(amount / 1_000_000).toFixed(1)} Tr`;
+    return `${(amount / 1_000_000).toFixed(1)} Tr vnđ`;
   }
   if (Math.abs(amount) >= 1_000) {
-    return `${(amount / 1_000).toFixed(0)}k`;
+    return `${(amount / 1_000).toFixed(0)}k vnđ`;
   }
-  return `${amount}₫`;
+  return `${amount} vnđ`;
 }
 
 export function formatDateVN(dateString: string): string {

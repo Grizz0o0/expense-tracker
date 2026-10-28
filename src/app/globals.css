@@ -32,6 +32,8 @@
   body {
     background-color: var(--bg-app);
     color: var(--text-primary);
+    font-size: 15px;
+    line-height: 1.5;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

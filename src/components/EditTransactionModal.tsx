@@ -246,17 +246,10 @@ export function EditTransactionModal({
 
             {/* BIG AMOUNT DISPLAY */}
             <div className="text-center py-2">
-              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
                 Số tiền ({type === 'expense' ? 'Đã chi' : 'Thu vào'})
               </label>
-              <div className="flex items-center justify-center gap-1.5">
-                <span
-                  className={`text-3xl sm:text-4xl font-extrabold ${
-                    type === 'expense' ? 'text-rose-500' : 'text-emerald-500'
-                  }`}
-                >
-                  ₫
-                </span>
+              <div className="flex items-baseline justify-center gap-1.5 px-4">
                 <input
                   type="text"
                   inputMode="numeric"
@@ -265,31 +258,51 @@ export function EditTransactionModal({
                   placeholder="0"
                   value={displayAmountFormatted === '0' && !amountStr ? '' : displayAmountFormatted}
                   onChange={(e) => setAmountStr(e.target.value.replace(/\D/g, '').slice(0, 13))}
-                  className={`w-full max-w-[280px] text-center text-3xl sm:text-4xl font-black bg-transparent outline-none tabular-nums tracking-tight ${
+                  className={`w-auto min-w-[60px] max-w-[260px] text-right text-3xl sm:text-4xl font-black bg-transparent outline-none tabular-nums tracking-tight ${
                     type === 'expense' ? 'text-rose-500' : 'text-emerald-500'
                   }`}
                 />
+                <span className={`text-lg sm:text-xl font-bold uppercase ${type === 'expense' ? 'text-rose-500/80' : 'text-emerald-500/80'}`}>
+                  vnđ
+                </span>
               </div>
 
-              {/* Quick Presets */}
-              <div className="flex items-center justify-center gap-1.5 mt-2 flex-wrap">
-                {[1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000].map((val) => (
+              {/* Quick Presets - Chia đều 2 dòng gọn gàng, không tràn viền */}
+              <div className="max-w-md mx-auto mt-3 space-y-2">
+                {/* Dòng 1: Tiền lẻ & vừa (+1k, +2k, +5k, +10k, +20k) */}
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[1_000, 2_000, 5_000, 10_000, 20_000].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => handleAddPreset(val)}
+                      className="py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 active:scale-95 transition cursor-pointer"
+                    >
+                      +{val / 1_000}k
+                    </button>
+                  ))}
+                </div>
+
+                {/* Dòng 2: Mệnh giá lớn & Nút xóa (+50k, +100k, +200k, +500k, Xóa) */}
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[50_000, 100_000, 200_000, 500_000].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => handleAddPreset(val)}
+                      className="py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 active:scale-95 transition cursor-pointer"
+                    >
+                      +{val / 1_000}k
+                    </button>
+                  ))}
                   <button
-                    key={val}
                     type="button"
-                    onClick={() => handleAddPreset(val)}
-                    className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 active:scale-95 transition cursor-pointer"
+                    onClick={() => setAmountStr('')}
+                    className="py-1.5 text-xs font-bold rounded-xl border border-rose-200/60 dark:border-rose-900/40 bg-rose-50/50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/40 active:scale-95 transition cursor-pointer"
                   >
-                    +{val >= 1_000_000 ? `${val / 1_000_000}Tr` : `${val / 1_000}k`}
+                    Xóa
                   </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setAmountStr('')}
-                  className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 active:scale-95 transition cursor-pointer"
-                >
-                  Xóa
-                </button>
+                </div>
               </div>
             </div>
 
