@@ -29,11 +29,15 @@
     --accent-glow: rgba(99, 102, 241, 0.18);
   }
 
+  html {
+    font-size: 17px; /* Tăng 1px so với mặc định 16px của browser, tỷ lệ rem tăng đồng bộ ~6.25% (khoảng 1-2px cho toàn bộ hệ thống) */
+  }
+
   body {
     background-color: var(--bg-app);
     color: var(--text-primary);
-    font-size: 15px;
-    line-height: 1.5;
+    font-size: 16px;
+    line-height: 1.55;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
