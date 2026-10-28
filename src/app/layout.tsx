@@ -19,6 +19,8 @@ export const viewport: Viewport = {
   themeColor: '#08090d',
 };
 
+import { ToastProvider } from '@/components/Toast';
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -26,8 +28,25 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi" suppressHydrationWarning className="dark">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                const saved = localStorage.getItem('theme');
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if (saved === 'light' || (!saved && !prefersDark)) {
+                  document.documentElement.classList.remove('dark');
+                } else {
+                  document.documentElement.classList.add('dark');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)]">
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );

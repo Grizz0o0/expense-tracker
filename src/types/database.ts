@@ -37,3 +37,16 @@ export const DEFAULT_INCOME_CATEGORIES: CategoryOption[] = [
   { name: 'Đầu tư / Lãi tiết kiệm', icon: '📈', color: '#8b5cf6' },
   { name: 'Thu khác', icon: '💰', color: '#6366f1' },
 ];
+
+export interface Budget {
+  id: string;
+  user_id: string;
+  category: string;
+  amount: number;
+  month: number;
+  year: number;
+  created_at: string;
+}
+
+export type TimeFilterPeriod = 'this_month' | 'last_month' | 'this_week' | 'all';
+

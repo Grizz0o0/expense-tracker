@@ -30,24 +30,40 @@ export function SpendingChart({ transactions }: SpendingChartProps) {
     }
 
     const COLORS = [
-      '#f97316', '#3b82f6', '#ec4899', '#eab308',
-      '#10b981', '#ef4444', '#8b5cf6', '#06b6d4', '#64748b'
+      '#f97316',
+      '#3b82f6',
+      '#ec4899',
+      '#eab308',
+      '#10b981',
+      '#ef4444',
+      '#8b5cf6',
+      '#06b6d4',
+      '#64748b',
     ];
 
+    let acc = 0;
     const list = Array.from(map.values())
       .sort((a, b) => b.amount - a.amount)
-      .map((item, index) => ({
-        ...item,
-        percentage: Math.round((item.amount / total) * 100),
-        color: COLORS[index % COLORS.length],
-      }));
+      .map((item, index) => {
+        const exactPercentage = (item.amount / total) * 100;
+        const strokeDashoffset = 100 - acc;
+        acc += exactPercentage;
+        const displayPercentage = exactPercentage < 1 && item.amount > 0 ? '<1%' : `${Math.round(exactPercentage)}%`;
+        return {
+          ...item,
+          exactPercentage,
+          displayPercentage,
+          strokeDashoffset,
+          color: COLORS[index % COLORS.length],
+        };
+      });
 
     return { list, total };
   }, [transactions]);
 
   if (categoryStats.total === 0) {
     return (
-      <div className="p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#10121a] flex flex-col items-center justify-center text-center min-h-[220px]">
+      <div className="p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#10121a] flex flex-col items-center justify-center text-center min-h-[220px] shadow-sm">
         <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-400 mb-3">
           <PieChart className="w-6 h-6" />
         </div>
@@ -55,21 +71,20 @@ export function SpendingChart({ transactions }: SpendingChartProps) {
           Chưa có khoản chi nào
         </p>
         <p className="text-xs text-slate-400 mt-1">
-          Bấm nút "+ Thêm chi tiêu" để ghi nhận khoản chi đầu tiên
+          Bấm nút "+ Ghi chép mới" để ghi nhận khoản chi đầu tiên
         </p>
       </div>
     );
   }
-
-  // Calculate SVG Donut segments
-  let cumulativePercent = 0;
 
   return (
     <div className="p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#10121a] shadow-sm">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
           <span>PHÂN BỔ CHI TIÊU</span>
-          <span className="text-[11px] font-normal text-slate-400">({categoryStats.list.length} mục)</span>
+          <span className="text-[11px] font-normal text-slate-400">
+            ({categoryStats.list.length} mục)
+          </span>
         </h3>
         <span className="text-xs font-bold text-slate-900 dark:text-white tabular-nums">
           {formatVND(categoryStats.total)}
@@ -91,9 +106,7 @@ export function SpendingChart({ transactions }: SpendingChartProps) {
                 className="text-slate-100 dark:text-white/5"
               />
               {categoryStats.list.map((item, index) => {
-                const strokeDasharray = `${item.percentage} ${100 - item.percentage}`;
-                const strokeDashoffset = 100 - cumulativePercent;
-                cumulativePercent += item.percentage;
+                const strokeDasharray = `${item.exactPercentage} ${100 - item.exactPercentage}`;
 
                 return (
                   <circle
@@ -105,7 +118,7 @@ export function SpendingChart({ transactions }: SpendingChartProps) {
                     stroke={item.color}
                     strokeWidth="5"
                     strokeDasharray={strokeDasharray}
-                    strokeDashoffset={strokeDashoffset}
+                    strokeDashoffset={item.strokeDashoffset}
                     className="transition-all duration-500 ease-out hover:opacity-80"
                   />
                 );
@@ -138,8 +151,8 @@ export function SpendingChart({ transactions }: SpendingChartProps) {
                 <span className="font-semibold text-slate-900 dark:text-white tabular-nums">
                   {formatVND(item.amount)}
                 </span>
-                <span className="text-[11px] text-slate-400 w-8 text-right font-mono">
-                  {item.percentage}%
+                <span className="text-[11px] text-slate-400 w-9 text-right font-mono">
+                  {item.displayPercentage}
                 </span>
               </div>
             </div>

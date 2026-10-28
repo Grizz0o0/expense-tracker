@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { TransactionType, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } from '@/types/database';
+import { toDateString } from '@/lib/utils';
 import { X, Check, Loader2, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+const MAX_AMOUNT = 9_999_999_999_999; // 13 digits max for PostgreSQL numeric(15, 2)
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -20,9 +23,22 @@ export function QuickAddModal({ isOpen, onClose, onSuccess }: QuickAddModalProps
   const [category, setCategory] = useState(DEFAULT_EXPENSE_CATEGORIES[0].name);
   const [categoryIcon, setCategoryIcon] = useState(DEFAULT_EXPENSE_CATEGORIES[0].icon);
   const [note, setNote] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => toDateString(new Date()));
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Keyboard Escape listener to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const currentCategories = type === 'expense' ? DEFAULT_EXPENSE_CATEGORIES : DEFAULT_INCOME_CATEGORIES;
 
@@ -40,7 +56,8 @@ export function QuickAddModal({ isOpen, onClose, onSuccess }: QuickAddModalProps
 
   const handleAddPreset = (value: number) => {
     const current = Number(amountStr.replace(/\D/g, '')) || 0;
-    setAmountStr(String(current + value));
+    const next = Math.min(current + value, MAX_AMOUNT);
+    setAmountStr(String(next));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -52,6 +69,16 @@ export function QuickAddModal({ isOpen, onClose, onSuccess }: QuickAddModalProps
       return;
     }
 
+    if (numericAmount > MAX_AMOUNT) {
+      setErrorMsg('Số tiền không được vượt quá 9.999 tỷ VNĐ');
+      return;
+    }
+
+    if (!date || date.length < 10 || isNaN(Date.parse(date))) {
+      setErrorMsg('Vui lòng chọn ngày giao dịch hợp lệ');
+      return;
+    }
+
     setLoading(true);
     setErrorMsg('');
 
@@ -60,7 +87,7 @@ export function QuickAddModal({ isOpen, onClose, onSuccess }: QuickAddModalProps
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) throw new Error('Chưa đăng nhập');
+      if (!user) throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
 
       const { error } = await supabase.from('transactions').insert([
         {
@@ -83,13 +110,14 @@ export function QuickAddModal({ isOpen, onClose, onSuccess }: QuickAddModalProps
       onClose();
     } catch (err: unknown) {
       const error = err as Error;
-      setErrorMsg(error.message || 'Không thể lưu giao dịch');
+      const msg = error.message === 'Failed to fetch'
+        ? 'Lỗi kết nối mạng, vui lòng kiểm tra đường truyền internet.'
+        : (error.message || 'Không thể lưu giao dịch');
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
     }
   };
-
-  if (!isOpen) return null;
 
   const displayAmountFormatted = amountStr
     ? new Intl.NumberFormat('vi-VN').format(Number(amountStr.replace(/\D/g, '')))
@@ -97,11 +125,15 @@ export function QuickAddModal({ isOpen, onClose, onSuccess }: QuickAddModalProps
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
-        {/* Backdrop click to close */}
-        <div className="absolute inset-0" onClick={onClose} />
+      {isOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
+          {/* Backdrop click to close */}
+          <div className="absolute inset-0" onClick={onClose} />
 
         <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Thêm chi tiêu nhanh"
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 40 }}
@@ -167,7 +199,7 @@ export function QuickAddModal({ isOpen, onClose, onSuccess }: QuickAddModalProps
                   required
                   placeholder="0"
                   value={displayAmountFormatted === '0' && !amountStr ? '' : displayAmountFormatted}
-                  onChange={(e) => setAmountStr(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => setAmountStr(e.target.value.replace(/\D/g, '').slice(0, 13))}
                   className={`w-full max-w-[280px] text-center text-3xl sm:text-4xl font-black bg-transparent outline-none tabular-nums tracking-tight ${
                     type === 'expense' ? 'text-rose-500' : 'text-emerald-500'
                   }`}
@@ -189,7 +221,7 @@ export function QuickAddModal({ isOpen, onClose, onSuccess }: QuickAddModalProps
                 <button
                   type="button"
                   onClick={() => setAmountStr('')}
-                  className="px-2 py-1 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  className="px-2 py-1 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                 >
                   Xóa
                 </button>
@@ -246,7 +278,7 @@ export function QuickAddModal({ isOpen, onClose, onSuccess }: QuickAddModalProps
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-900 dark:text-white outline-none focus:border-indigo-500 dark:[color-scheme:dark]"
                 />
               </div>
             </div>
@@ -273,6 +305,7 @@ export function QuickAddModal({ isOpen, onClose, onSuccess }: QuickAddModalProps
           </form>
         </motion.div>
       </div>
-    </AnimatePresence>
+    ) : null}
+  </AnimatePresence>
   );
 }

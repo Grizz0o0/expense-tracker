@@ -7,10 +7,24 @@ interface SummaryCardsProps {
   totalIncome: number;
   totalExpense: number;
   balance: number;
+  periodLabel?: string;
 }
 
-export function SummaryCards({ totalIncome, totalExpense, balance }: SummaryCardsProps) {
-  const expenseRatio = totalIncome > 0 ? Math.min(Math.round((totalExpense / totalIncome) * 100), 100) : 0;
+export function SummaryCards({
+  totalIncome,
+  totalExpense,
+  balance,
+  periodLabel = 'Kỳ này',
+}: SummaryCardsProps) {
+  let expenseRatioText = '';
+  if (totalIncome > 0) {
+    const ratio = Math.round((totalExpense / totalIncome) * 100);
+    expenseRatioText = ratio > 100 ? `Vượt thu nhập (${ratio}%)` : `Chiếm ${ratio}% thu nhập`;
+  } else if (totalExpense > 0) {
+    expenseRatioText = 'Bội chi (chưa có thu nhập)';
+  } else {
+    expenseRatioText = 'Chưa có phát sinh chi';
+  }
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
@@ -26,7 +40,7 @@ export function SummaryCards({ totalIncome, totalExpense, balance }: SummaryCard
           {formatVND(balance)}
         </div>
         <div className="mt-2 text-[11px] text-slate-400">
-          Thu trừ Chi tháng hiện tại
+          Thu trừ Chi ({periodLabel})
         </div>
       </div>
 
@@ -59,7 +73,7 @@ export function SummaryCards({ totalIncome, totalExpense, balance }: SummaryCard
         </div>
         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-400">
           <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
-          <span>Chiếm {expenseRatio}% thu nhập</span>
+          <span>{expenseRatioText}</span>
         </div>
       </div>
     </div>
