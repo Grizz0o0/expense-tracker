@@ -14,7 +14,7 @@ import { BudgetWidget } from '@/components/BudgetWidget';
 import { BudgetModal } from '@/components/BudgetModal';
 import { TimeFilterBar } from '@/components/TimeFilterBar';
 import { exportTransactionsToExcel } from '@/components/ExportExcelModal';
-import { Plus, Download, Sparkles, Loader2 } from 'lucide-react';
+import { Plus, Download, Sparkles, Loader2, ArrowRight } from 'lucide-react';
 
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -183,36 +183,40 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen flex flex-col pb-24 sm:pb-12">
-      <Navbar userEmail={userEmail} onExportExcel={handleExport} />
+      <Navbar
+        userEmail={userEmail}
+        onExportExcel={handleExport}
+        onOpenAddModal={() => setIsAddModalOpen(true)}
+      />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-5 sm:py-7 space-y-5">
-        {/* Top greeting & Quick actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6 sm:py-8 space-y-5">
+        {/* Top Header & Fast Action */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <span>SỔ TÀI CHÍNH CÁ NHÂN</span>
-              <Sparkles className="w-5 h-5 text-amber-400" />
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 dark:text-white flex items-center gap-2">
+              <span>Tổng quan tài chính</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Toàn bộ dữ liệu của bạn được cô lập và bảo vệ bằng PostgreSQL RLS
+              Dữ liệu được mã hóa riêng tư và đồng bộ tức thì trên thiết bị của bạn
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
               onClick={handleExport}
-              className="sm:hidden px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 cursor-pointer"
+              className="sm:hidden px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-slate-700 dark:text-slate-300 flex items-center gap-1.5 cursor-pointer"
             >
-              <Download className="w-4 h-4" /> Excel
+              <Download className="w-3.5 h-3.5" /> Excel
             </button>
 
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-500/25 flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm shadow-indigo-500/25 flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
             >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>GHI CHÉP MỚI</span>
-              <kbd className="hidden md:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-indigo-700 rounded border border-indigo-400/40">
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Ghi chép mới</span>
+              <kbd className="hidden md:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-indigo-700 rounded border border-indigo-400/30">
                 N
               </kbd>
             </button>
@@ -221,9 +225,9 @@ export default function DashboardPage() {
 
         {/* Loading state */}
         {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center text-slate-400">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-2" />
-            <p className="text-xs">Đang đồng bộ dữ liệu thời gian thực...</p>
+          <div className="py-24 flex flex-col items-center justify-center text-slate-400">
+            <Loader2 className="w-7 h-7 animate-spin text-indigo-500 mb-2.5" />
+            <p className="text-xs font-medium">Đang tải dữ liệu...</p>
           </div>
         ) : (
           <>
@@ -251,15 +255,15 @@ export default function DashboardPage() {
               onOpenModal={() => setIsBudgetModalOpen(true)}
             />
 
-            {/* 2. Main Grid: Analytics & Transactions */}
+            {/* 2-Column Section: Spending Chart + Transaction Feed */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-              {/* Spending Donut Chart (Synced with Time Filter) */}
-              <div className="lg:col-span-5 order-2 lg:order-1">
+              {/* Spending Donut Chart */}
+              <div className="lg:col-span-5 space-y-4">
                 <SpendingChart transactions={filteredTransactions} />
               </div>
 
-              {/* Transactions Feed (Synced with Time Filter & Edit Modal) */}
-              <div className="lg:col-span-7 order-1 lg:order-2">
+              {/* Transaction Feed */}
+              <div className="lg:col-span-7">
                 <TransactionFeed
                   transactions={filteredTransactions}
                   onDeleted={loadData}
@@ -271,14 +275,14 @@ export default function DashboardPage() {
         )}
       </main>
 
-      {/* Floating Action Button (Mobile Only) */}
-      <div className="fixed bottom-5 right-5 sm:hidden z-30">
+      {/* Floating Action Button on Mobile */}
+      <div className="fixed bottom-6 right-5 sm:hidden z-20">
         <button
           onClick={() => setIsAddModalOpen(true)}
-          className="w-14 h-14 rounded-full bg-indigo-600 text-white shadow-xl shadow-indigo-600/40 flex items-center justify-center active:scale-95 transition cursor-pointer"
-          aria-label="Thêm chi tiêu nhanh"
+          className="w-13 h-13 rounded-full bg-indigo-600 text-white shadow-xl shadow-indigo-500/40 flex items-center justify-center active:scale-90 transition cursor-pointer"
+          aria-label="Ghi chép giao dịch mới"
         >
-          <Plus className="w-7 h-7 stroke-[2.5]" />
+          <Plus className="w-6 h-6 stroke-[3]" />
         </button>
       </div>
 
@@ -292,11 +296,11 @@ export default function DashboardPage() {
       {/* R1. Edit Transaction Modal */}
       <EditTransactionModal
         isOpen={isEditModalOpen}
+        transaction={editingTransaction}
         onClose={() => {
           setIsEditModalOpen(false);
           setEditingTransaction(null);
         }}
-        transaction={editingTransaction}
         onSuccess={handleTransactionUpdated}
       />
 

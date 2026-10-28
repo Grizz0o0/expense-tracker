@@ -3,9 +3,10 @@
 import { useState, useMemo } from 'react';
 import { Transaction } from '@/types/database';
 import { formatVND, formatDateVN } from '@/lib/utils';
-import { Trash2, Pencil, Search, Calendar } from 'lucide-react';
+import { Trash2, Pencil, Search, Calendar, Inbox } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from './Toast';
+import { CategoryBadge } from './CategoryIcon';
 
 interface TransactionFeedProps {
   transactions: Transaction[];
@@ -55,95 +56,90 @@ export function TransactionFeed({
     return groups;
   }, [filtered]);
 
-  const sortedDates = Object.keys(grouped).sort(
-    (a, b) => b.localeCompare(a)
-  );
+  const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa giao dịch này?')) return;
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Bạn có chắc muốn xóa khoản ghi chép này?')) return;
     setDeletingId(id);
+
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      const query = supabase.from('transactions').delete().eq('id', id);
+      if (user?.id) {
+        query.eq('user_id', user.id);
+      }
 
-      const { error } = await supabase
-        .from('transactions')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
-
+      const { error } = await query;
       if (error) throw error;
-      showToast('Đã xóa giao dịch thành công', 'info');
+
+      showToast('Đã xóa giao dịch thành công', 'success');
       onDeleted();
     } catch (err: unknown) {
-      const error = err as Error;
-      const msg = error.message === 'Failed to fetch'
-        ? 'Lỗi kết nối mạng, vui lòng kiểm tra đường truyền internet.'
-        : (error.message || 'Không thể xóa');
-      showToast('Không thể xóa: ' + msg, 'error');
+      const msg = err instanceof Error ? err.message : 'Lỗi xóa giao dịch';
+      showToast(msg, 'error');
     } finally {
       setDeletingId(null);
     }
   };
 
   return (
-    <div className="p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#10121a] shadow-sm">
-      {/* Top filters */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-white/5">
+    <div className="rounded-2xl fintech-card bg-white dark:bg-[#0f1118] overflow-hidden">
+      {/* Header with Search and Type Filter */}
+      <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-white/[0.05] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-            <span>LỊCH SỬ GIAO DỊCH</span>
-            <span className="text-[11px] font-normal text-slate-400">({filtered.length})</span>
-          </h3>
-          <p className="text-[11px] text-slate-400 hidden sm:block">
-            Bấm trực tiếp vào giao dịch để sửa thông tin
+          <h2 className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
+            Dòng Tiền Giao Dịch
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Lịch sử thu chi được sắp xếp theo trình tự thời gian
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Search bar */}
-          <div className="relative flex-1 sm:w-44">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          {/* Search box */}
+          <div className="relative flex-1 sm:w-56">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Tìm kiếm..."
+              placeholder="Tìm theo danh mục, ghi chú..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20"
             />
           </div>
 
-          {/* Filter Type */}
-          <div className="flex items-center p-0.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5 text-xs shrink-0">
+          {/* Type segmented filter */}
+          <div className="flex bg-slate-100 dark:bg-white/[0.04] p-0.5 rounded-xl border border-slate-200/80 dark:border-white/[0.06] shrink-0">
             <button
               onClick={() => setFilterType('all')}
-              className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition ${
                 filterType === 'all'
-                  ? 'bg-white dark:bg-white/15 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-500'
+                  ? 'bg-white dark:bg-[#1a1d2d] text-slate-900 dark:text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
               }`}
             >
               Tất cả
             </button>
             <button
               onClick={() => setFilterType('expense')}
-              className={`px-2 py-1 rounded-lg font-medium transition cursor-pointer ${
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition ${
                 filterType === 'expense'
-                  ? 'bg-rose-500 text-white shadow-xs'
-                  : 'text-slate-500'
+                  ? 'bg-white dark:bg-[#1a1d2d] text-rose-600 dark:text-rose-400 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
               }`}
             >
               Chi
             </button>
             <button
               onClick={() => setFilterType('income')}
-              className={`px-2 py-1 rounded-lg font-medium transition cursor-pointer ${
+              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition ${
                 filterType === 'income'
-                  ? 'bg-emerald-500 text-white shadow-xs'
-                  : 'text-slate-500'
+                  ? 'bg-white dark:bg-[#1a1d2d] text-emerald-600 dark:text-emerald-400 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
               }`}
             >
               Thu
@@ -152,116 +148,115 @@ export function TransactionFeed({
         </div>
       </div>
 
-      {/* Feed List */}
-      {sortedDates.length === 0 ? (
-        <div className="py-12 text-center text-slate-400 text-xs">
-          Không tìm thấy giao dịch nào trong khoảng thời gian này
+      {/* List Content */}
+      {filtered.length === 0 ? (
+        <div className="py-16 px-4 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-400 mx-auto flex items-center justify-center mb-3">
+            <Inbox className="w-6 h-6 stroke-[1.5]" />
+          </div>
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            Chưa có giao dịch nào
+          </p>
+          <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+            {search ? 'Không tìm thấy kết quả phù hợp với từ khóa.' : 'Bấm nút "Ghi chép mới" để thêm khoản thu hoặc chi đầu tiên.'}
+          </p>
         </div>
       ) : (
-        <div className="divide-y divide-slate-100 dark:divide-white/5">
+        <div className="divide-y divide-slate-100 dark:divide-white/[0.04]">
           {sortedDates.map((dateStr) => {
             const items = grouped[dateStr];
-            const dateTotal = items.reduce(
-              (sum, item) =>
-                sum + (item.type === 'expense' ? -Number(item.amount) : Number(item.amount)),
-              0
-            );
+            const dateTotal = items.reduce((sum, item) => {
+              return item.type === 'income' ? sum + Number(item.amount) : sum - Number(item.amount);
+            }, 0);
 
             return (
-              <div key={dateStr} className="py-4 first:pt-3">
-                {/* Date header */}
-                <div className="flex items-center justify-between text-xs text-slate-400 mb-2 font-medium">
+              <div key={dateStr} className="p-4 sm:p-5">
+                {/* Date Header */}
+                <div className="flex items-center justify-between text-xs mb-3 text-slate-400 dark:text-slate-500">
                   <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
                     <Calendar className="w-3.5 h-3.5 text-indigo-500" />
                     <span>{formatDateVN(dateStr)}</span>
-                    <span className="text-[11px] font-normal text-slate-400">({dateStr})</span>
                   </div>
-                  <span
-                    className={`tabular-nums font-semibold ${
-                      dateTotal >= 0 ? 'text-emerald-500' : 'text-slate-500'
-                    }`}
-                  >
-                    {dateTotal >= 0 ? `+${formatVND(dateTotal)}` : formatVND(dateTotal)}
-                  </span>
+                  <div className="font-mono text-[11px] tabular-nums">
+                    Biến động: <strong className={dateTotal >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}>
+                      {dateTotal >= 0 ? '+' : ''}{formatVND(dateTotal)}
+                    </strong>
+                  </div>
                 </div>
 
-                {/* Items */}
+                {/* Items in date */}
                 <div className="space-y-1.5">
-                  {items.map((item) => (
-                    <div
-                      key={item.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => onEditTransaction?.(item)}
-                      onKeyDown={(e) => {
-                        if (e.target !== e.currentTarget) return;
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          onEditTransaction?.(item);
-                        }
-                      }}
-                      className="group flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-white/5 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-                      title="Bấm để chỉnh sửa giao dịch"
-                    >
-                      <div className="flex items-center gap-3 truncate">
-                        <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition-transform">
-                          {item.category_icon || (item.type === 'expense' ? '🍜' : '💵')}
-                        </div>
-                        <div className="truncate">
-                          <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                            {item.category}
-                          </div>
-                          {item.note && (
-                            <div className="text-[11px] text-slate-400 truncate">
-                              {item.note}
+                  {items.map((item) => {
+                    const isExpense = item.type === 'expense';
+                    const isDeleting = deletingId === item.id;
+
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => onEditTransaction && onEditTransaction(item)}
+                        className={`group p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/[0.03] transition flex items-center justify-between gap-3 cursor-pointer border border-transparent hover:border-slate-200/60 dark:hover:border-white/[0.06] ${
+                          isDeleting ? 'opacity-50 pointer-events-none' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <CategoryBadge category={item.category} size="md" />
+
+                          <div className="min-w-0">
+                            <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white truncate">
+                              {item.category}
                             </div>
-                          )}
+                            {item.note ? (
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                {item.note}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-slate-400 italic">
+                                Không có ghi chú
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Amount & Actions */}
+                        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                          <div className="text-right">
+                            <div
+                              className={`text-sm sm:text-base font-bold tabular-nums tracking-tight ${
+                                isExpense
+                                  ? 'text-slate-900 dark:text-slate-100'
+                                  : 'text-emerald-600 dark:text-emerald-400'
+                              }`}
+                            >
+                              {isExpense ? '-' : '+'}{formatVND(Number(item.amount))}
+                            </div>
+                            <div className="text-[10px] text-slate-400 uppercase font-medium">
+                              {isExpense ? 'Chi' : 'Thu'}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditTransaction && onEditTransaction(item);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-white/10 rounded-lg transition cursor-pointer"
+                              title="Sửa"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => handleDelete(item.id, e)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition cursor-pointer"
+                              title="Xóa"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2 shrink-0 pl-3">
-                        <span
-                          className={`text-sm font-bold tabular-nums ${
-                            item.type === 'expense'
-                              ? 'text-rose-600 dark:text-rose-400'
-                              : 'text-emerald-600 dark:text-emerald-400'
-                          }`}
-                        >
-                          {item.type === 'expense' ? '-' : '+'}
-                          {formatVND(item.amount)}
-                        </span>
-
-                        <div className="flex items-center gap-1 sm:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onEditTransaction?.(item);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition cursor-pointer"
-                            title="Sửa giao dịch"
-                            aria-label="Sửa giao dịch"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(item.id);
-                            }}
-                            disabled={deletingId === item.id}
-                            className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition cursor-pointer"
-                            title="Xóa giao dịch"
-                            aria-label="Xóa giao dịch"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
