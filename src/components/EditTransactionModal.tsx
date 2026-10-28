@@ -273,7 +273,7 @@ export function EditTransactionModal({
 
               {/* Quick Presets */}
               <div className="flex items-center justify-center gap-1.5 mt-2 flex-wrap">
-                {[10_000, 50_000, 100_000, 500_000].map((val) => (
+                {[1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000].map((val) => (
                   <button
                     key={val}
                     type="button"
@@ -286,7 +286,7 @@ export function EditTransactionModal({
                 <button
                   type="button"
                   onClick={() => setAmountStr('')}
-                  className="px-2 py-1 text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 active:scale-95 transition cursor-pointer"
                 >
                   Xóa
                 </button>
