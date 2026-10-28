@@ -65,6 +65,34 @@ export interface DebtLog {
   created_at: string;
 }
 
+export type RecurringFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export interface RecurringTransaction {
+  id: string;
+  user_id: string;
+  title: string;
+  amount: number;
+  type: 'expense' | 'income';
+  category: string;
+  category_icon: string;
+  wallet_id?: string | null;
+  frequency: RecurringFrequency;
+  next_run_date: string;
+  is_active: boolean;
+  note?: string | null;
+  created_at: string;
+}
+
+export interface TelegramUserLink {
+  id: string;
+  user_id: string;
+  telegram_chat_id: string;
+  telegram_username?: string | null;
+  connect_code: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface CategoryOption {
   name: string;
   icon: string;

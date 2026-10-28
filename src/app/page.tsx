@@ -2,7 +2,14 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Transaction, Budget, TimeFilterPeriod, Wallet, Debt } from '@/types/database';
+import {
+  Transaction,
+  Budget,
+  TimeFilterPeriod,
+  Wallet,
+  Debt,
+  RecurringTransaction,
+} from '@/types/database';
 import { isDateInPeriod, getCurrentMonthYear, getPeriodDescription } from '@/lib/utils';
 import { Navbar } from '@/components/Navbar';
 import { SummaryCards } from '@/components/SummaryCards';
@@ -17,16 +24,21 @@ import { WalletBar } from '@/components/WalletBar';
 import { WalletManagerModal } from '@/components/WalletManagerModal';
 import { TransferModal } from '@/components/TransferModal';
 import { DebtTrackerModal } from '@/components/DebtTrackerModal';
+import { RecurringModal } from '@/components/RecurringModal';
+import { TelegramConnectModal } from '@/components/TelegramConnectModal';
+import { AnalyticsView } from '@/components/AnalyticsView';
 import { exportTransactionsToExcel } from '@/components/ExportExcelModal';
 import { Plus, Download, Sparkles, Loader2, ArrowRight } from 'lucide-react';
 
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), []);
 
+  const [activeView, setActiveView] = useState<'dashboard' | 'analytics'>('dashboard');
   const [userEmail, setUserEmail] = useState<string>('');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
+  const [recurringList, setRecurringList] = useState<RecurringTransaction[]>([]);
   const [budget, setBudget] = useState<Budget | null>(null);
   const [timeFilter, setTimeFilter] = useState<TimeFilterPeriod>('this_month');
   const [loading, setLoading] = useState(true);
@@ -39,10 +51,12 @@ export default function DashboardPage() {
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isDebtModalOpen, setIsDebtModalOpen] = useState(false);
+  const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
+  const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
 
   const { month: currentMonth, year: currentYear } = useMemo(() => getCurrentMonthYear(), []);
 
-  // 1. Fetch user, transactions, wallets, debts & current month budget
+  // 1. Fetch user, transactions, wallets, debts, recurring & current month budget
   const loadData = useCallback(async () => {
     try {
       const {
@@ -78,7 +92,6 @@ export default function DashboardPage() {
         console.warn('Lỗi tải danh sách ví:', walletError);
       } else if (walletData) {
         if (walletData.length === 0) {
-          // Tự tạo 1 ví mặc định: "Ví Tiền Mặt"
           const { data: newW } = await supabase
             .from('wallets')
             .insert([
@@ -109,7 +122,17 @@ export default function DashboardPage() {
         setDebts(debtData as Debt[]);
       }
 
-      // 4. Fetch current month budget
+      // 4. Fetch recurring transactions
+      const { data: recData, error: recError } = await supabase
+        .from('recurring_transactions')
+        .select('*')
+        .order('next_run_date', { ascending: true });
+
+      if (!recError && recData) {
+        setRecurringList(recData as RecurringTransaction[]);
+      }
+
+      // 5. Fetch current month budget
       const { data: budgetData, error: budgetError } = await supabase
         .from('budgets')
         .select('*')
@@ -133,37 +156,24 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
 
-    // 2. Realtime listener: Cập nhật thời gian thực khi có thay đổi
+    // 2. Realtime listener: Cập nhật thời gian thực khi có thay đổi bất kỳ bảng nào
     const channel = supabase
-      .channel('realtime_dashboard')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'transactions' },
-        () => {
-          loadData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'budgets' },
-        () => {
-          loadData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'wallets' },
-        () => {
-          loadData();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'debts' },
-        () => {
-          loadData();
-        }
-      )
+      .channel('realtime_dashboard_master')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'budgets' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'debts' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'recurring_transactions' }, () => {
+        loadData();
+      })
       .subscribe();
 
     return () => {
@@ -197,7 +207,7 @@ export default function DashboardPage() {
     let expense = 0;
 
     for (const t of filteredTransactions) {
-      if (t.type === 'transfer') continue; // Transfer không tính vào thu chi
+      if (t.type === 'transfer') continue;
       const val = Number(t.amount);
       if (t.type === 'income') {
         income += val;
@@ -213,8 +223,7 @@ export default function DashboardPage() {
     };
   }, [filteredTransactions]);
 
-  // Tính toán TÀI SẢN RÒNG (NET WORTH):
-  // Tổng tiền tất cả các ví + Tiền người khác nợ mình (Lend) - Tiền mình nợ người khác (Borrow)
+  // Tính toán TÀI SẢN RÒNG (NET WORTH)
   const { netWorth, totalLend, totalBorrow } = useMemo(() => {
     const totalWalletBalance = wallets.reduce((sum, w) => sum + Number(w.balance || 0), 0);
     const lend = debts
@@ -278,102 +287,118 @@ export default function DashboardPage() {
         onOpenAddModal={() => setIsAddModalOpen(true)}
         onOpenWallets={() => setIsWalletModalOpen(true)}
         onOpenDebts={() => setIsDebtModalOpen(true)}
+        onOpenRecurring={() => setIsRecurringModalOpen(true)}
+        onOpenTelegram={() => setIsTelegramModalOpen(true)}
+        activeView={activeView}
+        onToggleView={setActiveView}
       />
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6 sm:py-8 space-y-5">
-        {/* Top Header & Fast Action */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 dark:text-white flex items-center gap-2">
-              <span>Tổng quan tài chính</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Hệ thống quản lý tài sản, đa ví & sổ chi tiêu thông minh
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={handleExport}
-              className="sm:hidden px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-slate-700 dark:text-slate-300 flex items-center gap-1.5 cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" /> Excel
-            </button>
-
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm shadow-indigo-500/25 flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Ghi chép mới</span>
-              <kbd className="hidden md:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-indigo-700 rounded border border-indigo-400/30">
-                N
-              </kbd>
-            </button>
-          </div>
-        </div>
-
-        {/* Loading state */}
-        {loading ? (
-          <div className="py-24 flex flex-col items-center justify-center text-slate-400">
-            <Loader2 className="w-7 h-7 animate-spin text-indigo-500 mb-2.5" />
-            <p className="text-xs font-medium">Đang tải dữ liệu...</p>
-          </div>
+        {activeView === 'analytics' ? (
+          /* MÀN HÌNH BÁO CÁO TÀI CHÍNH SÂU & XU HƯỚNG */
+          <AnalyticsView
+            transactions={transactions}
+            wallets={wallets}
+            debts={debts}
+          />
         ) : (
+          /* MÀN HÌNH DASHBOARD TỔNG QUAN CHÍNH */
           <>
-            {/* Thanh Quản Lý Đa Ví Nhanh */}
-            <WalletBar
-              wallets={wallets}
-              onOpenManageWallets={() => setIsWalletModalOpen(true)}
-              onOpenTransferModal={() => setIsTransferModalOpen(true)}
-            />
-
-            {/* Time Filter Bar */}
-            <TimeFilterBar
-              currentFilter={timeFilter}
-              onFilterChange={setTimeFilter}
-              transactionCount={filteredTransactions.length}
-            />
-
-            {/* 1. Summary Cards (Net Worth + Cash Flow + In/Out) */}
-            <SummaryCards
-              totalIncome={totalIncome}
-              totalExpense={totalExpense}
-              balance={balance}
-              periodLabel={getPeriodDescription(timeFilter).label}
-              netWorth={netWorth}
-              totalDebtsLend={totalLend}
-              totalDebtsBorrow={totalBorrow}
-              onOpenDebts={() => setIsDebtModalOpen(true)}
-            />
-
-            {/* 2. Monthly Budget Widget */}
-            <BudgetWidget
-              budget={budget}
-              currentMonthExpense={currentMonthExpense}
-              month={currentMonth}
-              year={currentYear}
-              onOpenModal={() => setIsBudgetModalOpen(true)}
-            />
-
-            {/* 2-Column Section: Spending Chart + Transaction Feed */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-              {/* Spending Donut Chart */}
-              <div className="lg:col-span-5 space-y-4">
-                <SpendingChart transactions={filteredTransactions} />
+            {/* Top Header & Fast Action */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 dark:text-white flex items-center gap-2">
+                  <span>Tổng quan tài chính</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                </h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Hệ thống quản lý tài sản, đa ví & trợ lý tài chính thông minh
+                </p>
               </div>
 
-              {/* Transaction Feed */}
-              <div className="lg:col-span-7">
-                <TransactionFeed
-                  transactions={filteredTransactions}
-                  wallets={wallets}
-                  onDeleted={loadData}
-                  onEditTransaction={handleOpenEdit}
-                />
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={handleExport}
+                  className="sm:hidden px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] text-slate-700 dark:text-slate-300 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Excel
+                </button>
+
+                <button
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm shadow-indigo-500/25 flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>Ghi chép mới</span>
+                  <kbd className="hidden md:inline-block ml-1 px-1.5 py-0.5 text-[10px] font-mono bg-indigo-700 rounded border border-indigo-400/30">
+                    N
+                  </kbd>
+                </button>
               </div>
             </div>
+
+            {/* Loading state */}
+            {loading ? (
+              <div className="py-24 flex flex-col items-center justify-center text-slate-400">
+                <Loader2 className="w-7 h-7 animate-spin text-indigo-500 mb-2.5" />
+                <p className="text-xs font-medium">Đang tải dữ liệu...</p>
+              </div>
+            ) : (
+              <>
+                {/* Thanh Quản Lý Đa Ví Nhanh */}
+                <WalletBar
+                  wallets={wallets}
+                  onOpenManageWallets={() => setIsWalletModalOpen(true)}
+                  onOpenTransferModal={() => setIsTransferModalOpen(true)}
+                />
+
+                {/* Time Filter Bar */}
+                <TimeFilterBar
+                  currentFilter={timeFilter}
+                  onFilterChange={setTimeFilter}
+                  transactionCount={filteredTransactions.length}
+                />
+
+                {/* 1. Summary Cards (Net Worth + Cash Flow + In/Out) */}
+                <SummaryCards
+                  totalIncome={totalIncome}
+                  totalExpense={totalExpense}
+                  balance={balance}
+                  periodLabel={getPeriodDescription(timeFilter).label}
+                  netWorth={netWorth}
+                  totalDebtsLend={totalLend}
+                  totalDebtsBorrow={totalBorrow}
+                  onOpenDebts={() => setIsDebtModalOpen(true)}
+                />
+
+                {/* 2. Monthly Budget Widget */}
+                <BudgetWidget
+                  budget={budget}
+                  currentMonthExpense={currentMonthExpense}
+                  month={currentMonth}
+                  year={currentYear}
+                  onOpenModal={() => setIsBudgetModalOpen(true)}
+                />
+
+                {/* 2-Column Section: Spending Chart + Transaction Feed */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                  {/* Spending Donut Chart */}
+                  <div className="lg:col-span-5 space-y-4">
+                    <SpendingChart transactions={filteredTransactions} />
+                  </div>
+
+                  {/* Transaction Feed */}
+                  <div className="lg:col-span-7">
+                    <TransactionFeed
+                      transactions={filteredTransactions}
+                      wallets={wallets}
+                      onDeleted={loadData}
+                      onEditTransaction={handleOpenEdit}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </>
         )}
       </main>
@@ -389,7 +414,7 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* Quick Add Modal (Hỗ trợ AI Voice/NLP & Chọn Ví) */}
+      {/* Quick Add Modal (Hỗ trợ AI Voice/NLP, Chọn Ví & AI OCR Scan Bill) */}
       <QuickAddModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
@@ -420,6 +445,21 @@ export default function DashboardPage() {
         debts={debts}
         wallets={wallets}
         onRefresh={loadData}
+      />
+
+      {/* Modal Chi tiêu Định kỳ / Thuê bao */}
+      <RecurringModal
+        isOpen={isRecurringModalOpen}
+        onClose={() => setIsRecurringModalOpen(false)}
+        recurringList={recurringList}
+        wallets={wallets}
+        onRefresh={loadData}
+      />
+
+      {/* Modal Kết nối Telegram Bot */}
+      <TelegramConnectModal
+        isOpen={isTelegramModalOpen}
+        onClose={() => setIsTelegramModalOpen(false)}
       />
 
       {/* Sửa giao dịch */}

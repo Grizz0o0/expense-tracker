@@ -69,14 +69,11 @@ begin
     end if;
 end $$;
 
--- Nâng cấp check constraint cho type nếu đang chỉ có expense, income
 alter table public.transactions drop constraint if exists transactions_type_check;
 alter table public.transactions add constraint transactions_type_check check (type in ('expense', 'income', 'transfer'));
 
--- Kích hoạt RLS cho transactions
 alter table public.transactions enable row level security;
 
--- Policies bảo mật cho transactions
 create policy "Users can view own transactions"
     on public.transactions for select
     using (auth.uid() = user_id);
@@ -94,7 +91,6 @@ create policy "Users can delete own transactions"
     on public.transactions for delete
     using (auth.uid() = user_id);
 
--- Chỉ mục tối ưu tốc độ truy vấn
 create index if not exists idx_transactions_user_date 
     on public.transactions (user_id, transaction_date desc);
 
@@ -111,7 +107,7 @@ create table if not exists public.debts (
     id uuid default gen_random_uuid() primary key,
     user_id uuid references auth.users(id) on delete cascade not null,
     person_name varchar(150) not null,
-    type varchar(20) not null check (type in ('lend', 'borrow')), -- lend: Cho vay (họ nợ tôi), borrow: Đi vay (tôi nợ họ)
+    type varchar(20) not null check (type in ('lend', 'borrow')),
     initial_amount numeric(15, 2) not null check (initial_amount > 0),
     paid_amount numeric(15, 2) default 0 not null check (paid_amount >= 0),
     due_date date,
@@ -143,7 +139,6 @@ create policy "Users can delete own debts"
 create index if not exists idx_debts_user_status 
     on public.debts (user_id, status);
 
--- Bảng lịch sử trả nợ / thu nợ từng phần
 create table if not exists public.debt_logs (
     id uuid default gen_random_uuid() primary key,
     user_id uuid references auth.users(id) on delete cascade not null,
@@ -170,7 +165,84 @@ create policy "Users can delete own debt logs"
     using (auth.uid() = user_id);
 
 -- ------------------------------------------------------------------------------
--- 4. BẢNG NGÂN SÁCH (BUDGETS)
+-- 4. BẢNG GIAO DỊCH ĐỊNH KỲ / THUÊ BAO (RECURRING_TRANSACTIONS)
+-- ------------------------------------------------------------------------------
+create table if not exists public.recurring_transactions (
+    id uuid default gen_random_uuid() primary key,
+    user_id uuid references auth.users(id) on delete cascade not null,
+    title varchar(150) not null,
+    amount numeric(15, 2) not null check (amount > 0),
+    type varchar(10) default 'expense' not null check (type in ('expense', 'income')),
+    category varchar(100) not null,
+    category_icon varchar(10) default '🔄',
+    wallet_id uuid references public.wallets(id) on delete set null,
+    frequency varchar(20) default 'monthly' not null check (frequency in ('daily', 'weekly', 'monthly', 'yearly')),
+    next_run_date date default current_date not null,
+    is_active boolean default true not null,
+    note text,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.recurring_transactions enable row level security;
+
+create policy "Users can view own recurring transactions"
+    on public.recurring_transactions for select
+    using (auth.uid() = user_id);
+
+create policy "Users can insert own recurring transactions"
+    on public.recurring_transactions for insert
+    with check (auth.uid() = user_id);
+
+create policy "Users can update own recurring transactions"
+    on public.recurring_transactions for update
+    using (auth.uid() = user_id)
+    with check (auth.uid() = user_id);
+
+create policy "Users can delete own recurring transactions"
+    on public.recurring_transactions for delete
+    using (auth.uid() = user_id);
+
+create index if not exists idx_recurring_user_date 
+    on public.recurring_transactions (user_id, next_run_date);
+
+-- ------------------------------------------------------------------------------
+-- 5. BẢNG LIÊN KẾT BOT TELEGRAM (TELEGRAM_USER_LINKS)
+-- ------------------------------------------------------------------------------
+create table if not exists public.telegram_user_links (
+    id uuid default gen_random_uuid() primary key,
+    user_id uuid references auth.users(id) on delete cascade not null,
+    telegram_chat_id varchar(100) not null,
+    telegram_username varchar(100),
+    connect_code varchar(20) not null,
+    is_active boolean default true not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique(telegram_chat_id)
+);
+
+alter table public.telegram_user_links enable row level security;
+
+create policy "Users can view own telegram link"
+    on public.telegram_user_links for select
+    using (auth.uid() = user_id);
+
+create policy "Users can insert own telegram link"
+    on public.telegram_user_links for insert
+    with check (auth.uid() = user_id);
+
+create policy "Users can update own telegram link"
+    on public.telegram_user_links for update
+    using (auth.uid() = user_id)
+    with check (auth.uid() = user_id);
+
+create policy "Users can delete own telegram link"
+    on public.telegram_user_links for delete
+    using (auth.uid() = user_id);
+
+create index if not exists idx_telegram_chat_id 
+    on public.telegram_user_links (telegram_chat_id);
+
+-- ------------------------------------------------------------------------------
+-- 6. BẢNG NGÂN SÁCH (BUDGETS)
 -- ------------------------------------------------------------------------------
 create table if not exists public.budgets (
     id uuid default gen_random_uuid() primary key,
@@ -203,11 +275,11 @@ create policy "Users can delete own budgets"
     using (auth.uid() = user_id);
 
 -- ------------------------------------------------------------------------------
--- 5. BẢNG DANH MỤC TÙY CHỈNH (CUSTOM CATEGORIES)
+-- 7. BẢNG DANH MỤC TÙY CHỈNH (CUSTOM CATEGORIES)
 -- ------------------------------------------------------------------------------
 create table if not exists public.custom_categories (
     id uuid default gen_random_uuid() primary key,
-    user_id references auth.users(id) on delete cascade not null,
+    user_id uuid references auth.users(id) on delete cascade not null,
     name varchar(100) not null,
     icon varchar(10) default '🏷️',
     color varchar(20) default '#6366f1',

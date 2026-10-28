@@ -10,7 +10,7 @@ import {
 } from '@/types/database';
 import { toDateString } from '@/lib/utils';
 import { parseNaturalLanguageInput } from '@/lib/smartInputParser';
-import { X, Check, Loader2, Sparkles, Mic, MicOff, Wallet as WalletIcon } from 'lucide-react';
+import { X, Check, Loader2, Sparkles, Mic, MicOff, Wallet as WalletIcon, Camera, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useToast } from './Toast';
 
@@ -62,7 +62,52 @@ export function QuickAddModal({ isOpen, onClose, onSuccess, wallets = [] }: Quic
   // AI Smart Natural Input & Voice
   const [smartPrompt, setSmartPrompt] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [isScanningBill, setIsScanningBill] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleScanReceiptFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Vui lòng chọn tệp hình ảnh hóa đơn', 'error');
+      return;
+    }
+
+    setIsScanningBill(true);
+    showToast('🔍 AI đang đọc dữ liệu hóa đơn...', 'info');
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Str = reader.result as string;
+        const res = await fetch('/api/ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64Str }),
+        });
+
+        const data = await res.json();
+        if (data.success && data.result) {
+          const { amount, merchant, category: billCategory, categoryIcon: billIcon, note: billNote } = data.result;
+          if (amount) setAmountStr(String(amount));
+          if (billCategory) setCategory(billCategory);
+          if (billIcon) setCategoryIcon(billIcon);
+          if (merchant || billNote) setNote(merchant ? `${merchant} - ${billNote || ''}` : billNote);
+
+          showToast('✨ Quét hóa đơn thành công!', 'success');
+        } else {
+          showToast(data.error || 'Không thể bóc tách hóa đơn', 'error');
+        }
+        setIsScanningBill(false);
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      showToast('Lỗi khi tải ảnh hóa đơn', 'error');
+      setIsScanningBill(false);
+    }
+  };
 
   // Khởi tạo ví mặc định
   useEffect(() => {
@@ -334,7 +379,7 @@ export function QuickAddModal({ isOpen, onClose, onSuccess, wallets = [] }: Quic
               </button>
             </div>
 
-            {/* Smart NLP / Voice Assistant Bar */}
+            {/* Smart NLP / Voice / OCR Assistant Bar */}
             <div className="mt-3.5 p-2.5 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 border border-indigo-500/20">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-indigo-500 flex-shrink-0 animate-pulse" />
@@ -351,6 +396,33 @@ export function QuickAddModal({ isOpen, onClose, onSuccess, wallets = [] }: Quic
                   placeholder='AI Nhập liệu: "Ăn bún bò 45k", "Đổ xăng 70k"...'
                   className="w-full text-xs bg-transparent border-0 text-slate-900 dark:text-white focus:outline-none placeholder:text-slate-400"
                 />
+
+                {/* Ẩn file input cho Scan Bill */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleScanReceiptFile}
+                />
+
+                {/* Nút Scan Bill */}
+                <button
+                  type="button"
+                  disabled={isScanningBill}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-1.5 rounded-xl bg-white dark:bg-white/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 transition cursor-pointer flex-shrink-0 disabled:opacity-50"
+                  title="Chụp ảnh / Quét hóa đơn (OCR)"
+                >
+                  {isScanningBill ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" />
+                  ) : (
+                    <Camera className="w-3.5 h-3.5" />
+                  )}
+                </button>
+
+                {/* Nút Mic */}
                 <button
                   type="button"
                   onClick={toggleVoice}
