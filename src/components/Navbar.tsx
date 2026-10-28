@@ -3,15 +3,23 @@
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from './ThemeToggle';
-import { Wallet, LogOut, ShieldCheck, Download, Plus } from 'lucide-react';
+import { Wallet, LogOut, ShieldCheck, Download, Plus, HandCoins } from 'lucide-react';
 
 interface NavbarProps {
   userEmail?: string;
   onExportExcel?: () => void;
   onOpenAddModal?: () => void;
+  onOpenWallets?: () => void;
+  onOpenDebts?: () => void;
 }
 
-export function Navbar({ userEmail, onExportExcel, onOpenAddModal }: NavbarProps) {
+export function Navbar({
+  userEmail,
+  onExportExcel,
+  onOpenAddModal,
+  onOpenWallets,
+  onOpenDebts,
+}: NavbarProps) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -37,17 +45,41 @@ export function Navbar({ userEmail, onExportExcel, onOpenAddModal }: NavbarProps
               </span>
             </div>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:block">
-              Quản lý tài chính cá nhân tốc độ cao
+              Quản lý tài chính cá nhân & Đa ví thông minh
             </p>
           </div>
         </div>
 
         {/* Right actions */}
         <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Nút mở Vay - Nợ */}
+          {onOpenDebts && (
+            <button
+              onClick={onOpenDebts}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] hover:bg-slate-50 dark:hover:bg-white/[0.08] text-slate-700 dark:text-slate-200 transition cursor-pointer"
+              title="Sổ theo dõi Vay - Nợ"
+            >
+              <HandCoins className="w-3.5 h-3.5 text-amber-500" />
+              <span className="hidden sm:inline">Vay - Nợ</span>
+            </button>
+          )}
+
+          {/* Nút mở Ví */}
+          {onOpenWallets && (
+            <button
+              onClick={onOpenWallets}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] hover:bg-slate-50 dark:hover:bg-white/[0.08] text-slate-700 dark:text-slate-200 transition cursor-pointer"
+              title="Quản lý ví tài chính"
+            >
+              <Wallet className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="hidden sm:inline">Ví tiền</span>
+            </button>
+          )}
+
           {onExportExcel && (
             <button
               onClick={onExportExcel}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] hover:bg-slate-50 dark:hover:bg-white/[0.08] text-slate-700 dark:text-slate-200 transition cursor-pointer"
+              className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] hover:bg-slate-50 dark:hover:bg-white/[0.08] text-slate-700 dark:text-slate-200 transition cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Xuất Excel</span>
@@ -60,7 +92,7 @@ export function Navbar({ userEmail, onExportExcel, onOpenAddModal }: NavbarProps
               className="sm:hidden px-3 py-1.5 rounded-xl font-bold text-xs text-white bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-sm shadow-indigo-500/20"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>Ghi chép</span>
+              <span>Ghi</span>
             </button>
           )}
 
@@ -70,8 +102,8 @@ export function Navbar({ userEmail, onExportExcel, onOpenAddModal }: NavbarProps
           {/* User info & Logout */}
           {userEmail && (
             <div className="flex items-center gap-2 pl-1 border-l border-slate-200 dark:border-white/[0.08]">
-              <div className="hidden md:block text-right">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 max-w-[140px] truncate">
+              <div className="hidden lg:block text-right">
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 max-w-[130px] truncate">
                   {userEmail}
                 </div>
               </div>

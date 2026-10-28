@@ -1,4 +1,4 @@
-export type TransactionType = 'expense' | 'income';
+export type TransactionType = 'expense' | 'income' | 'transfer';
 
 export interface Transaction {
   id: string;
@@ -9,6 +9,59 @@ export interface Transaction {
   category_icon: string;
   note: string | null;
   transaction_date: string;
+  wallet_id?: string | null;
+  to_wallet_id?: string | null; // Cho giao dịch chuyển tiền nội bộ
+  created_at: string;
+}
+
+export type WalletType = 'cash' | 'bank' | 'e_wallet' | 'credit' | 'savings' | 'other';
+
+export interface Wallet {
+  id: string;
+  user_id: string;
+  name: string;
+  type: WalletType;
+  balance: number;
+  color: string;
+  icon: string;
+  is_default: boolean;
+  created_at: string;
+}
+
+export const DEFAULT_WALLET_TYPES: { type: WalletType; label: string; icon: string; defaultColor: string }[] = [
+  { type: 'cash', label: 'Tiền mặt', icon: '💵', defaultColor: '#10b981' },
+  { type: 'bank', label: 'Tài khoản ngân hàng', icon: '🏦', defaultColor: '#3b82f6' },
+  { type: 'e_wallet', label: 'Ví điện tử (Momo, ZaloPay...)', icon: '📱', defaultColor: '#ec4899' },
+  { type: 'credit', label: 'Thẻ tín dụng (Credit Card)', icon: '💳', defaultColor: '#f59e0b' },
+  { type: 'savings', label: 'Sổ tiết kiệm / Tích lũy', icon: '🐷', defaultColor: '#8b5cf6' },
+  { type: 'other', label: 'Khác', icon: '💼', defaultColor: '#64748b' },
+];
+
+export type DebtType = 'lend' | 'borrow'; // lend: Tôi cho vay (họ nợ tôi), borrow: Tôi đi vay (tôi nợ họ)
+export type DebtStatus = 'open' | 'partial' | 'settled';
+
+export interface Debt {
+  id: string;
+  user_id: string;
+  person_name: string;
+  type: DebtType;
+  initial_amount: number;
+  paid_amount: number;
+  due_date: string | null;
+  status: DebtStatus;
+  wallet_id?: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface DebtLog {
+  id: string;
+  user_id: string;
+  debt_id: string;
+  amount: number;
+  paid_date: string;
+  wallet_id?: string | null;
+  note: string | null;
   created_at: string;
 }
 
@@ -49,4 +102,3 @@ export interface Budget {
 }
 
 export type TimeFilterPeriod = 'this_month' | 'last_month' | 'this_week' | 'all';
-

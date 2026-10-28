@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Transaction, Budget, TimeFilterPeriod } from '@/types/database';
+import { Transaction, Budget, TimeFilterPeriod, Wallet, Debt } from '@/types/database';
 import { isDateInPeriod, getCurrentMonthYear, getPeriodDescription } from '@/lib/utils';
 import { Navbar } from '@/components/Navbar';
 import { SummaryCards } from '@/components/SummaryCards';
@@ -13,6 +13,10 @@ import { EditTransactionModal } from '@/components/EditTransactionModal';
 import { BudgetWidget } from '@/components/BudgetWidget';
 import { BudgetModal } from '@/components/BudgetModal';
 import { TimeFilterBar } from '@/components/TimeFilterBar';
+import { WalletBar } from '@/components/WalletBar';
+import { WalletManagerModal } from '@/components/WalletManagerModal';
+import { TransferModal } from '@/components/TransferModal';
+import { DebtTrackerModal } from '@/components/DebtTrackerModal';
 import { exportTransactionsToExcel } from '@/components/ExportExcelModal';
 import { Plus, Download, Sparkles, Loader2, ArrowRight } from 'lucide-react';
 
@@ -21,6 +25,8 @@ export default function DashboardPage() {
 
   const [userEmail, setUserEmail] = useState<string>('');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [debts, setDebts] = useState<Debt[]>([]);
   const [budget, setBudget] = useState<Budget | null>(null);
   const [timeFilter, setTimeFilter] = useState<TimeFilterPeriod>('this_month');
   const [loading, setLoading] = useState(true);
@@ -30,10 +36,13 @@ export default function DashboardPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [isDebtModalOpen, setIsDebtModalOpen] = useState(false);
 
   const { month: currentMonth, year: currentYear } = useMemo(() => getCurrentMonthYear(), []);
 
-  // 1. Fetch user, transactions & current month budget
+  // 1. Fetch user, transactions, wallets, debts & current month budget
   const loadData = useCallback(async () => {
     try {
       const {
@@ -44,7 +53,12 @@ export default function DashboardPage() {
         setUserEmail(user.email);
       }
 
-      // Fetch transactions
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      // 1. Fetch transactions
       const { data: transData, error: transError } = await supabase
         .from('transactions')
         .select('*')
@@ -54,7 +68,48 @@ export default function DashboardPage() {
       if (transError) throw transError;
       setTransactions((transData as Transaction[]) || []);
 
-      // Fetch current month budget
+      // 2. Fetch wallets (Nếu chưa có ví nào thì tự khởi tạo Ví Tiền Mặt)
+      const { data: walletData, error: walletError } = await supabase
+        .from('wallets')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (walletError && walletError.code !== '42P01') {
+        console.warn('Lỗi tải danh sách ví:', walletError);
+      } else if (walletData) {
+        if (walletData.length === 0) {
+          // Tự tạo 1 ví mặc định: "Ví Tiền Mặt"
+          const { data: newW } = await supabase
+            .from('wallets')
+            .insert([
+              {
+                user_id: user.id,
+                name: 'Ví Tiền Mặt',
+                type: 'cash',
+                balance: 0,
+                color: '#10b981',
+                icon: '💵',
+                is_default: true,
+              },
+            ])
+            .select();
+          if (newW) setWallets(newW as Wallet[]);
+        } else {
+          setWallets(walletData as Wallet[]);
+        }
+      }
+
+      // 3. Fetch debts
+      const { data: debtData, error: debtError } = await supabase
+        .from('debts')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!debtError && debtData) {
+        setDebts(debtData as Debt[]);
+      }
+
+      // 4. Fetch current month budget
       const { data: budgetData, error: budgetError } = await supabase
         .from('budgets')
         .select('*')
@@ -78,7 +133,7 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
 
-    // 2. Realtime listener: Cập nhật thời gian thực khi có thay đổi transactions hoặc budgets
+    // 2. Realtime listener: Cập nhật thời gian thực khi có thay đổi
     const channel = supabase
       .channel('realtime_dashboard')
       .on(
@@ -91,6 +146,20 @@ export default function DashboardPage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'budgets' },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'wallets' },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'debts' },
         () => {
           loadData();
         }
@@ -117,17 +186,18 @@ export default function DashboardPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Filter transactions according to selected time period (R3)
+  // Filter transactions theo kỳ thời gian
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => isDateInPeriod(t.transaction_date, timeFilter));
   }, [transactions, timeFilter]);
 
-  // Compute metrics for the active time filter (KPI Cards)
+  // Tính toán Dòng tiền Thu/Chi trong kỳ (loại bỏ transfer)
   const { totalIncome, totalExpense, balance } = useMemo(() => {
     let income = 0;
     let expense = 0;
 
     for (const t of filteredTransactions) {
+      if (t.type === 'transfer') continue; // Transfer không tính vào thu chi
       const val = Number(t.amount);
       if (t.type === 'income') {
         income += val;
@@ -143,7 +213,25 @@ export default function DashboardPage() {
     };
   }, [filteredTransactions]);
 
-  // Current month total expense specifically for Monthly Budget Widget (R2)
+  // Tính toán TÀI SẢN RÒNG (NET WORTH):
+  // Tổng tiền tất cả các ví + Tiền người khác nợ mình (Lend) - Tiền mình nợ người khác (Borrow)
+  const { netWorth, totalLend, totalBorrow } = useMemo(() => {
+    const totalWalletBalance = wallets.reduce((sum, w) => sum + Number(w.balance || 0), 0);
+    const lend = debts
+      .filter((d) => d.type === 'lend' && d.status !== 'settled')
+      .reduce((sum, d) => sum + (Number(d.initial_amount) - Number(d.paid_amount || 0)), 0);
+    const borrow = debts
+      .filter((d) => d.type === 'borrow' && d.status !== 'settled')
+      .reduce((sum, d) => sum + (Number(d.initial_amount) - Number(d.paid_amount || 0)), 0);
+
+    return {
+      netWorth: totalWalletBalance + lend - borrow,
+      totalLend: lend,
+      totalBorrow: borrow,
+    };
+  }, [wallets, debts]);
+
+  // Current month total expense cho Budget Widget
   const currentMonthExpense = useMemo(() => {
     let sum = 0;
     const refDate = new Date(currentYear, currentMonth - 1, 15);
@@ -155,7 +243,7 @@ export default function DashboardPage() {
     return sum;
   }, [transactions, currentMonth, currentYear]);
 
-  // Handle transaction editing (R1)
+  // Sửa giao dịch
   const handleOpenEdit = (t: Transaction) => {
     setEditingTransaction(t);
     setIsEditModalOpen(true);
@@ -171,6 +259,7 @@ export default function DashboardPage() {
         return (b.created_at || '').localeCompare(a.created_at || '');
       });
     });
+    loadData();
   };
 
   const handleBudgetUpdated = (savedBudget: Budget | null) => {
@@ -187,6 +276,8 @@ export default function DashboardPage() {
         userEmail={userEmail}
         onExportExcel={handleExport}
         onOpenAddModal={() => setIsAddModalOpen(true)}
+        onOpenWallets={() => setIsWalletModalOpen(true)}
+        onOpenDebts={() => setIsDebtModalOpen(true)}
       />
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6 sm:py-8 space-y-5">
@@ -198,7 +289,7 @@ export default function DashboardPage() {
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Dữ liệu được mã hóa riêng tư và đồng bộ tức thì trên thiết bị của bạn
+              Hệ thống quản lý tài sản, đa ví & sổ chi tiêu thông minh
             </p>
           </div>
 
@@ -231,22 +322,33 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            {/* R3. Time Filter Bar */}
+            {/* Thanh Quản Lý Đa Ví Nhanh */}
+            <WalletBar
+              wallets={wallets}
+              onOpenManageWallets={() => setIsWalletModalOpen(true)}
+              onOpenTransferModal={() => setIsTransferModalOpen(true)}
+            />
+
+            {/* Time Filter Bar */}
             <TimeFilterBar
               currentFilter={timeFilter}
               onFilterChange={setTimeFilter}
               transactionCount={filteredTransactions.length}
             />
 
-            {/* 1. Summary Cards (Synced with Time Filter) */}
+            {/* 1. Summary Cards (Net Worth + Cash Flow + In/Out) */}
             <SummaryCards
               totalIncome={totalIncome}
               totalExpense={totalExpense}
               balance={balance}
               periodLabel={getPeriodDescription(timeFilter).label}
+              netWorth={netWorth}
+              totalDebtsLend={totalLend}
+              totalDebtsBorrow={totalBorrow}
+              onOpenDebts={() => setIsDebtModalOpen(true)}
             />
 
-            {/* R2. Monthly Budget Widget */}
+            {/* 2. Monthly Budget Widget */}
             <BudgetWidget
               budget={budget}
               currentMonthExpense={currentMonthExpense}
@@ -266,6 +368,7 @@ export default function DashboardPage() {
               <div className="lg:col-span-7">
                 <TransactionFeed
                   transactions={filteredTransactions}
+                  wallets={wallets}
                   onDeleted={loadData}
                   onEditTransaction={handleOpenEdit}
                 />
@@ -286,14 +389,40 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* Quick Add Modal */}
+      {/* Quick Add Modal (Hỗ trợ AI Voice/NLP & Chọn Ví) */}
       <QuickAddModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSuccess={loadData}
+        wallets={wallets}
       />
 
-      {/* R1. Edit Transaction Modal */}
+      {/* Modal Quản lý Đa Ví */}
+      <WalletManagerModal
+        isOpen={isWalletModalOpen}
+        onClose={() => setIsWalletModalOpen(false)}
+        wallets={wallets}
+        onRefresh={loadData}
+      />
+
+      {/* Modal Chuyển Tiền Nội Bộ */}
+      <TransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        wallets={wallets}
+        onSuccess={loadData}
+      />
+
+      {/* Modal Sổ Vay - Nợ */}
+      <DebtTrackerModal
+        isOpen={isDebtModalOpen}
+        onClose={() => setIsDebtModalOpen(false)}
+        debts={debts}
+        wallets={wallets}
+        onRefresh={loadData}
+      />
+
+      {/* Sửa giao dịch */}
       <EditTransactionModal
         isOpen={isEditModalOpen}
         transaction={editingTransaction}
@@ -304,7 +433,7 @@ export default function DashboardPage() {
         onSuccess={handleTransactionUpdated}
       />
 
-      {/* R2. Monthly Budget Modal */}
+      {/* Ngân sách */}
       <BudgetModal
         isOpen={isBudgetModalOpen}
         onClose={() => setIsBudgetModalOpen(false)}
