@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Wallet, LogIn, UserPlus, Lock, Mail, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { Wallet, LogIn, UserPlus, Lock, Mail, AlertCircle, CheckCircle2, Loader2, Eye, EyeOff } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 type AuthMode = 'login' | 'register' | 'forgot';
@@ -15,6 +15,9 @@ export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -24,10 +27,32 @@ export default function LoginPage() {
     setSuccessMsg('');
   };
 
+  const switchMode = (newMode: AuthMode) => {
+    setMode(newMode);
+    resetMessages();
+    setPassword('');
+    setConfirmPassword('');
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     resetMessages();
+
+    if (mode === 'register') {
+      if (password.length < 6) {
+        setErrorMsg('Mật khẩu phải có ít nhất 6 ký tự.');
+        setLoading(false);
+        return;
+      }
+      if (password !== confirmPassword) {
+        setErrorMsg('Mật khẩu xác nhận không khớp.');
+        setLoading(false);
+        return;
+      }
+    }
 
     try {
       if (mode === 'login') {
@@ -50,7 +75,11 @@ export default function LoginPage() {
           router.push('/');
           router.refresh();
         } else {
-          setSuccessMsg('Đăng ký thành công! Nếu cần xác thực email, vui lòng kiểm tra hộp thư.');
+          setSuccessMsg('Đăng ký thành công! Đang chuyển hướng vào sổ chi tiêu...');
+          setTimeout(() => {
+            router.push('/');
+            router.refresh();
+          }, 1000);
         }
       } else if (mode === 'forgot') {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -141,14 +170,51 @@ export default function LoginPage() {
               </label>
               <div className="relative">
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                  className="w-full pl-9 pr-10 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-slate-900 dark:text-white outline-none focus:border-indigo-500"
                 />
                 <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {mode === 'register' && (
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
+                Nhập lại mật khẩu
+              </label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full pl-9 pr-10 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+                />
+                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+                  tabIndex={-1}
+                  aria-label={showConfirmPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
           )}
@@ -157,10 +223,7 @@ export default function LoginPage() {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => {
-                  setMode('forgot');
-                  resetMessages();
-                }}
+                onClick={() => switchMode('forgot')}
                 className="text-[11px] text-slate-400 hover:text-indigo-500 transition cursor-pointer"
               >
                 Quên mật khẩu?
@@ -196,10 +259,7 @@ export default function LoginPage() {
               Chưa có tài khoản?{' '}
               <button
                 type="button"
-                onClick={() => {
-                  setMode('register');
-                  resetMessages();
-                }}
+                onClick={() => switchMode('register')}
                 className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
               >
                 Đăng ký ngay
@@ -208,10 +268,7 @@ export default function LoginPage() {
           ) : (
             <button
               type="button"
-              onClick={() => {
-                setMode('login');
-                resetMessages();
-              }}
+              onClick={() => switchMode('login')}
               className="font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
             >
               ← Quay lại Đăng nhập
