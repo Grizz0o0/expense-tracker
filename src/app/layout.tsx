@@ -4,6 +4,15 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Sổ Chi Tiêu Thông Minh — Bảo Mật Tuyệt Đối',
   description: 'Ghi chép chi tiêu cá nhân nhanh 3 giây, tối ưu đa thiết bị, bảo mật Row Level Security.',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/icon.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
